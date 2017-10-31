@@ -1,0 +1,83 @@
+        public ActionResult CallLog()
+        {
+            string ftpAddress = "ftp://domain.com/";
+            string user = "abc";
+            string password = "12345";
+
+
+            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpAddress);
+            request.Method = WebRequestMethods.Ftp.ListDirectory;
+            request.Credentials = new NetworkCredential(user, password);
+            //read the dir list which located at the ftp root folder
+            //sort the folder by folder name and pick the latest modified folder
+            List<string> dirlist = GetDirList(request).OrderByDescending(p => p).ToList();
+            var lastfolder = dirlist.FirstOrDefault();
+
+            //read the files under the latest modified folder
+            Uri ftp = new Uri(ftpAddress);
+            FtpWebRequest req;
+            req = (FtpWebRequest)WebRequest.Create(new Uri(ftp, lastfolder));
+            req.Method = WebRequestMethods.Ftp.ListDirectory;
+            req.Credentials = new NetworkCredential(user, password);
+            List<string> filelist = GetDirList(req);
+            
+            //read the content of each file under the latest modified folder 
+            foreach (string file in filelist)
+            {
+                FtpWebRequest reqfile = (FtpWebRequest)WebRequest.Create(new Uri(ftp, lastfolder + "/" + file));
+                reqfile.Method = WebRequestMethods.Ftp.DownloadFile;
+                reqfile.Credentials = new NetworkCredential(user, password);
+                using (FtpWebResponse response = (FtpWebResponse)reqfile.GetResponse())
+                {
+                    //use the response like below
+                    Stream responseStream = response.GetResponseStream();
+                    StreamReader reader = new StreamReader(responseStream);
+                    ReadAndSaveLog(reader);
+                }
+            }
+            return RedirectToAction("index");
+        }
+
+        //This method will read content form stream and save it into database
+        public void ReadAndSaveLog(StreamReader streamReader)
+        {
+            using (GlobxCallModelContext db = new GlobxCallModelContext())
+            {
+
+                string line;
+                int count = 0;
+                while ((line = streamReader.ReadLine()) != null)
+                {
+                    if (count != 0)
+                    {
+                        //split the record line using ';'
+                        string[] s = line.Split(';');
+                        //add the logitem into database
+                        db.CallLog.Add(new Customer_Call_Detail(s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12],
+            s[13], s[14], s[15], s[16], s[17], s[18], s[19], s[20]));
+
+                    }
+                    count++;
+
+                }
+                db.SaveChanges();
+
+            }
+        }
+
+        //This method will return the dir list 
+        public List<string> GetDirList(FtpWebRequest request)
+        {
+            List<string> tmpFileList = new List<string>();
+            using (FtpWebResponse response = (FtpWebResponse)request.GetResponse())
+            {
+                Stream responseStream = response.GetResponseStream();
+                StreamReader reader = new StreamReader(responseStream);
+
+                while (!reader.EndOfStream)
+                {
+                    tmpFileList.Add(reader.ReadLine());
+                }
+            }
+            return tmpFileList;
+        }
